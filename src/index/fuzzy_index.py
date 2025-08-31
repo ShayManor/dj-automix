@@ -6,15 +6,26 @@ from typing import List, Dict, Any, Tuple, Optional
 # Use orjson if installed (faster); fall back to stdlib json
 try:
     import orjson as _json
-    def jloads(b): return _json.loads(b)
-    def jdumps(o): return _json.dumps(o)
+
+
+    def jloads(b):
+        return _json.loads(b)
+
+
+    def jdumps(o):
+        return _json.dumps(o)
 except Exception:
-    def jloads(b): return json.loads(b)
-    def jdumps(o): return json.dumps(o).encode()
+    def jloads(b):
+        return json.loads(b)
+
+
+    def jdumps(o):
+        return json.dumps(o).encode()
 
 from rapidfuzz import process, fuzz
 
-FIELDS = ["title","artist","album","key","bpm","path"]
+FIELDS = ["title", "artist", "album", "key", "bpm", "path"]
+
 
 # ---------- Normalization ----------
 def norm(s: str) -> str:
@@ -26,9 +37,13 @@ def norm(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
+
 def to_int(x) -> Optional[int]:
-    try: return int(str(x).strip())
-    except Exception: return None
+    try:
+        return int(str(x).strip())
+    except Exception:
+        return None
+
 
 @dataclass
 class Song:
@@ -39,22 +54,23 @@ class Song:
     bpm: Any = ""
     path: str = ""
 
-    def normalized(self) -> Dict[str,str]:
+    def normalized(self) -> Dict[str, str]:
         return {
             "title_n": norm(self.title),
             "artist_n": norm(self.artist),
             "album_n": norm(self.album),
-            "key_n": norm(self.key).replace(" major","").replace(" minor","m"),
+            "key_n": norm(self.key).replace(" major", "").replace(" minor", "m"),
             "bpm_n": str(to_int(self.bpm) or ""),
             "path_n": norm(self.path),
         }
+
 
 # ---------- Index ----------
 class SongIndex:
     def __init__(self, items: List[Song]):
         self.items: List[Song] = items
         # Precompute normalized fields and a combined searchable string
-        self.norms: List[Dict[str,str]] = []
+        self.norms: List[Dict[str, str]] = []
         self.search_texts: List[str] = []
         for s in items:
             n = s.normalized()
@@ -65,14 +81,14 @@ class SongIndex:
     # Weighted fuzzy score across fields (like Fuse field weights)
     def score(self, q: str, idx: int) -> float:
         n = self.norms[idx]
-        w_title  = 0.55
+        w_title = 0.55
         w_artist = 0.4
-        w_album  = 0.05
+        w_album = 0.05
         # RapidFuzz scores are 0..100
-        s_title  = fuzz.WRatio(q, n["title_n"])   if n["title_n"]  else 0
-        s_artist = fuzz.WRatio(q, n["artist_n"])  if n["artist_n"] else 0
-        s_album  = fuzz.WRatio(q, n["album_n"])   if n["album_n"]  else 0
-        return w_title*s_title + w_artist*s_artist + w_album*s_album
+        s_title = fuzz.WRatio(q, n["title_n"]) if n["title_n"] else 0
+        s_artist = fuzz.WRatio(q, n["artist_n"]) if n["artist_n"] else 0
+        s_album = fuzz.WRatio(q, n["album_n"]) if n["album_n"] else 0
+        return w_title * s_title + w_artist * s_artist + w_album * s_album
 
     # Simple query language: field:value, bpm:lo..hi, quoted phrases
     def parse_query(self, query: str):
@@ -101,7 +117,7 @@ class SongIndex:
         query = norm(query)
         return query, phrase, filters
 
-    def filter_candidates(self, phrase: Optional[str], filters: Dict[str,Any]) -> List[int]:
+    def filter_candidates(self, phrase: Optional[str], filters: Dict[str, Any]) -> List[int]:
         cands = []
         for i, n in enumerate(self.norms):
             ok = True
@@ -118,7 +134,7 @@ class SongIndex:
                 ok = False
             if ok and "key" in filters:
                 # allow “am”, “a minor”, “A minor” → we normalized to short (e.g., am, c#, etc.)
-                keyq = filters["key"].replace(" major","").replace(" minor","m")
+                keyq = filters["key"].replace(" major", "").replace(" minor", "m")
                 if keyq not in n["key_n"]:
                     ok = False
             if ok and "bpm" in filters:
@@ -140,7 +156,7 @@ class SongIndex:
         if q_free:
             # RapidFuzz extract gives (text, score, index)
             # We just use it to shortlist indices, then rescore with field weights
-            ex = process.extract(q_free, self.search_texts, scorer=fuzz.WRatio, limit=max(100, limit*10))
+            ex = process.extract(q_free, self.search_texts, scorer=fuzz.WRatio, limit=max(100, limit * 10))
             cand_idx = [idx for _, _, idx in ex]
         else:
             cand_idx = list(range(len(self.items)))
@@ -179,6 +195,7 @@ class SongIndex:
         idx.search_texts = p["search_texts"]
         return idx
 
+
 # ---------- IO helpers ----------
 def load_songs(path: str) -> List[Song]:
     if path.lower().endswith(".json"):
@@ -193,14 +210,15 @@ def load_songs(path: str) -> List[Song]:
     songs = []
     for r in arr:
         songs.append(Song(
-            title = r.get("title") or r.get("Title") or "",
-            artist= r.get("artist") or r.get("Artist") or "",
-            album = r.get("album") or r.get("Album") or "",
-            key   = r.get("key")   or r.get("Key")   or "",
-            bpm   = r.get("bpm")   or r.get("BPM")   or "",
-            path  = r.get("path")  or r.get("SourceFile") or r.get("filename") or ""
+            title=r.get("title") or r.get("Title") or "",
+            artist=r.get("artist") or r.get("Artist") or "",
+            album=r.get("album") or r.get("Album") or "",
+            key=r.get("key") or r.get("Key") or "",
+            bpm=r.get("bpm") or r.get("BPM") or "",
+            path=r.get("path") or r.get("SourceFile") or r.get("filename") or ""
         ))
     return songs
+
 
 # ---------- CLI ----------
 def cmd_build(args):
@@ -209,6 +227,7 @@ def cmd_build(args):
     with open(args.output, "wb") as f:
         f.write(idx.to_bytes())
     print(f"Index built: {args.output}  ({len(items)} tracks)")
+
 
 def cmd_search(args):
     with open(args.index, "rb") as f:
@@ -219,26 +238,29 @@ def cmd_search(args):
         key = song.key
         print(f"{score:6.2f}  {song.artist} - {song.title}  [{key} • {bpm}]  {song.path}")
 
+
 def main():
     ap = argparse.ArgumentParser(description="Fuzzy song search (Fuse.js-like) in Python.")
     sub = ap.add_subparsers(required=True)
 
     ap_b = sub.add_parser("build", help="Build index from CSV/JSON.")
-    ap_b.add_argument("-i","--input", required=True, help="CSV or JSON of tracks.")
-    ap_b.add_argument("-o","--output", default="songs.index", help="Output index file.")
+    ap_b.add_argument("-i", "--input", required=True, help="CSV or JSON of tracks.")
+    ap_b.add_argument("-o", "--output", default="songs.index", help="Output index file.")
     ap_b.set_defaults(func=cmd_build)
 
     ap_s = sub.add_parser("search", help="Search the index.")
-    ap_s.add_argument("-x","--index", required=True, help="Index file from 'build'.")
+    ap_s.add_argument("-x", "--index", required=True, help="Index file from 'build'.")
     ap_s.add_argument("query", help="Query. Supports field:term, bpm:120..130, 'exact phrase'")
-    ap_s.add_argument("-k","--limit", type=int, default=10)
-    ap_s.add_argument("-t","--threshold", type=float, default=60.0, help="Score threshold 0..100")
+    ap_s.add_argument("-k", "--limit", type=int, default=10)
+    ap_s.add_argument("-t", "--threshold", type=float, default=60.0, help="Score threshold 0..100")
     ap_s.set_defaults(func=cmd_search)
 
     args = ap.parse_args()
     args.func(args)
 
-def search_index(query: str, limit: int = 10, threshold: float = 60.0, as_dict: bool = False, index_path: str="songs.index"):
+
+def search_index(query: str, limit: int = 10, threshold: float = 60.0, as_dict: bool = False,
+                 index_path: str = "songs.index"):
     """
     Convenience search helper.
     - query: free text and/or filters (e.g., "artist:twice bpm:120..130 'once in a lifetime'")
@@ -260,7 +282,8 @@ def search_index(query: str, limit: int = 10, threshold: float = 60.0, as_dict: 
         with open(index_path, "rb") as f:
             idx = SongIndex.from_bytes(f.read())
     except FileNotFoundError:
-        raise FileNotFoundError(f"Index not found: {index_path}. Build it with: songsearch.py build -i songs.json -o {index_path}")
+        raise FileNotFoundError(
+            f"Index not found: {index_path}. Build it with: songsearch.py build -i songs.json -o {index_path}")
     except Exception as e:
         raise RuntimeError(f"Failed to load index '{index_path}': {e}")
 
@@ -288,6 +311,7 @@ def search_index(query: str, limit: int = 10, threshold: float = 60.0, as_dict: 
             "path": song.path,
         })
     return out
+
 
 if __name__ == "__main__":
     main()
